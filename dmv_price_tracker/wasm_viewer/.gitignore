@@ -1,0 +1,11 @@
+# Environment files
+.env
+
+# Generated config file
+www/config.js
+
+# Build artifacts
+pkg/
+target/
+
+

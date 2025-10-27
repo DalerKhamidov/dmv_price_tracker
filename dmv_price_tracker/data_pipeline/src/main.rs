@@ -44,9 +44,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     
     println!("Starting Data Pipeline MVP...");
 
-    // Define zip codes for DC and Fairfax
-    let dc_zip_codes = vec!["20001", "20002", "20003", "20004", "20005", "20007", "20008", "20009", "20010", "20011"];
-    let fairfax_zip_codes = vec!["22030", "22031", "22032", "22033", "22034", "22035", "22038", "22041", "22042", "22043"];
+    // Define cities for DC and Fairfax
+    struct City {
+        name: &'static str,
+        state: &'static str,
+    }
+    
+    let cities = vec![
+        City { name: "Washington", state: "DC" },
+        City { name: "Fairfax", state: "VA" },
+    ];
 
     // 1. Load GeoJSON data (if available)
     let dc_lots_df = match load_geojson_to_polars("data/dc_lots.geojson") {
@@ -78,35 +85,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let client = reqwest::Client::new();
     let mut all_properties = Vec::new();
 
-    // Fetch DC market data
-    println!("\nFetching RentCast data for DC zip codes...");
-    for zip_code in &dc_zip_codes {
-        match fetch_rentcast_market_data(&client, &rentcast_api_key, zip_code).await {
+    // Fetch market data for each city
+    println!("\nFetching RentCast data for DC and Fairfax cities...");
+    for city in &cities {
+        match fetch_rentcast_market_data(&client, &rentcast_api_key, city.name, city.state).await {
             Ok(properties) => {
-                println!("  Zip {}: {} properties", zip_code, properties.len());
+                println!("  {} {}: {} properties", city.name, city.state, properties.len());
+                // Debug: print first property zip code to verify location
+                if let Some(first_prop) = properties.first() {
+                    println!("    Sample zip: {:?}", first_prop.zip_code);
+                    println!("    Sample location: {:?}, {:?}", first_prop.latitude, first_prop.longitude);
+                }
                 all_properties.extend(properties);
             }
             Err(e) => {
-                println!("  Warning: Could not fetch data for zip {}: {}", zip_code, e);
+                println!("  Warning: Could not fetch data for {} {}: {}", city.name, city.state, e);
             }
         }
         // Rate limiting: wait 500ms between requests
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-    }
-
-    // Fetch Fairfax market data
-    println!("\nFetching RentCast data for Fairfax zip codes...");
-    for zip_code in &fairfax_zip_codes {
-        match fetch_rentcast_market_data(&client, &rentcast_api_key, zip_code).await {
-            Ok(properties) => {
-                println!("  Zip {}: {} properties", zip_code, properties.len());
-                all_properties.extend(properties);
-            }
-            Err(e) => {
-                println!("  Warning: Could not fetch data for zip {}: {}", zip_code, e);
-            }
-        }
-        // Rate limiting
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     }
 
@@ -167,40 +163,50 @@ async fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Fetch RentCast market data by zip code
+/// Fetch RentCast market data by city and state
 async fn fetch_rentcast_market_data(
     client: &reqwest::Client,
     api_key: &str,
-    zip_code: &str,
+    city: &str,
+    state: &str,
 ) -> Result<Vec<RentCastProperty>, Box<dyn Error>> {
-    // First try to get properties by zip code
-    let url = "https://api.rentcast.io/v1/properties";
+    // Use RentCast listings endpoint with city and state
+    let url = "https://api.rentcast.io/v1/listings/rental/long-term";
+    
+    // Build query parameters
+    let params = vec![
+        ("city", city),
+        ("state", state),
+        ("propertyType", "Condo|Townhouse|Single Family"),
+        ("limit", "50"), // Get more results for better coverage
+    ];
+    
     let response = client
         .get(url)
-        .query(&[("zipcode", zip_code)])
+        .query(&params)
         .header("X-Api-Key", api_key)
         .send()
         .await?;
 
     if !response.status().is_success() {
-        // If that fails, try market data endpoint
-        let market_url = format!("https://api.rentcast.io/v1/markets?zip={}", zip_code);
-        let market_response = client
-            .get(&market_url)
-            .header("X-Api-Key", api_key)
-            .send()
-            .await?;
-        
-        if market_response.status().is_success() {
-            let _data: serde_json::Value = market_response.json().await?;
-            // Extract properties from market data if available
-            return Ok(vec![]);
-        }
-        
+        println!("    API returned status: {}", response.status());
         return Ok(vec![]);
     }
 
-    let properties: Vec<RentCastProperty> = response.json().await?;
+    // Parse the response
+    let data: serde_json::Value = response.json().await?;
+    
+    // Extract properties from the response
+    let mut properties = Vec::new();
+    
+    if let Some(array) = data.as_array() {
+        for item in array {
+            if let Ok(prop) = serde_json::from_value::<RentCastProperty>(item.clone()) {
+                properties.push(prop);
+            }
+        }
+    }
+    
     Ok(properties)
 }
 

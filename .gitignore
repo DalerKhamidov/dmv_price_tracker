@@ -5,6 +5,8 @@ Cargo.lock
 
 # WASM
 /wasm_viewer/pkg
+target/
+
 
 # Data
 /data_pipeline/data/
