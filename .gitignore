@@ -1,1 +1,19 @@
 .history*
+# Rust
+/target
+Cargo.lock
+
+# WASM
+/wasm_viewer/pkg
+
+# Data
+/data_pipeline/data/
+/output/
+*.json
+*.csv
+*.parquet
+
+# IDE
+.vscode/
+.idea/
+.env

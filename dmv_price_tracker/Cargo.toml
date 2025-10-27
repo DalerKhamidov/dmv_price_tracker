@@ -1,6 +1,11 @@
-[package]
-name = "dmv_price_tracker"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+members = [
+    "data_pipeline",
+    "wasm_viewer",
+]
+resolver = "2"
 
-[dependencies]
+[profile.release]
+lto = true
+opt-level = 'z' # Optimize for size
+codegen-units = 1

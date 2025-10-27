@@ -1,0 +1,19 @@
+body {
+    font-family: sans-serif;
+    background-color: #222;
+    color: #eee;
+    margin: 0;
+    padding: 1em;
+}
+
+h1 {
+    font-weight: 300;
+}
+
+#vis {
+    width: 90vw;
+    height: 80vh;
+    border: 1px solid #555;
+    background-color: #111;
+    /* Fallback */
+}
